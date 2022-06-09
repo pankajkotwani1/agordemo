@@ -2,7 +2,7 @@
   "//appId": "Get your own App ID at https://dashboard.agora.io/",
   "appId": "8bf5789aab2841d69c903ba6f0d6a2dc",
   "//token": "Please refer to https://docs.agora.io/en/Agora%20Platform/token",
-  "token": "0068bf5789aab2841d69c903ba6f0d6a2dcIACEqKmEeqLiJWVyK1+qY+gmt8yb9AQr3cRMpfTvhBzHogx+f9gAAAAAEACggSnc8v6hYgEAAQDy/qFi",
+  "token": "0068bf5789aab2841d69c903ba6f0d6a2dcIADPReEBU45a0eVXDt+yXtG2brD9CFqw4aPtfb585R0RNgx+f9gAAAAAEABUm4+sjAujYgEAAQCMC6Ni",
   "//channelId": "Your channel ID",
   "channelId": "test",
   "//uid": "Your int user ID",

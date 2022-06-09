@@ -11,7 +11,7 @@ const config = require('../../src/config/agora.config.json');
 
 let _engine: RtcEngine;
 let remoteUid: number[] = [];
-let is_host: boolean = false;
+let is_host: boolean = true;
 
 const CallService = {
   _remoteUid: remoteUid,
@@ -35,14 +35,12 @@ const CallService = {
     }
 
     const Role = is_host ? ClientRole.Broadcaster : ClientRole.Audience;
-    await _engine.setClientRole(Role);
-
     await _engine.muteLocalAudioStream(is_host ? false : true);
 
     await _engine.enableVideo();
     await _engine.startPreview();
     await _engine.setChannelProfile(ChannelProfile.LiveBroadcasting);
-    await _engine.setClientRole(ClientRole.Broadcaster);
+    await _engine.setClientRole(Role);
 
     return _engine;
   },
