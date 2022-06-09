@@ -8,6 +8,8 @@
  * @format
  */
 
+import { NavigationContainer } from '@react-navigation/native';
+import { createStackNavigator } from '@react-navigation/stack';
 import React from 'react';
 import {
   SafeAreaView,
@@ -17,12 +19,11 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-
-import { NavigationContainer } from '@react-navigation/native';
-import { createStackNavigator } from '@react-navigation/stack';
-
-import Basic from './examples/basic';
+import PIPPopup from './context/Modal';
+import { PIPProvider } from './context/ModalProvider';
+import { usePIPMode } from './context/useModal';
 import Advanced from './examples/advanced';
+import Basic from './examples/basic';
 
 const Stack = createStackNavigator();
 
@@ -30,17 +31,20 @@ const DATA = [Basic, Advanced];
 
 const App = () => {
   return (
-    <NavigationContainer>
-      <Stack.Navigator>
-        <Stack.Screen name={'APIExample'} component={Home} />
-        {DATA.map((value) =>
-          // @ts-ignore
-          value.data.map(({ name, component }) => (
-            <Stack.Screen name={name} component={component} />
-          ))
-        )}
-      </Stack.Navigator>
-    </NavigationContainer>
+    <PIPProvider>
+      <NavigationContainer>
+        <Stack.Navigator>
+          <Stack.Screen name={'APIExample'} component={Home} />
+          {DATA.map((value) =>
+            // @ts-ignore
+            value.data.map(({ name, component }) => (
+              <Stack.Screen name={name} component={component} />
+            ))
+          )}
+        </Stack.Navigator>
+        <PIPPopup />
+      </NavigationContainer>
+    </PIPProvider>
   );
 };
 
@@ -62,13 +66,24 @@ const Home = ({ navigation }) => {
 };
 
 // @ts-ignore
-const Item = ({ item, navigation }) => (
-  <View style={styles.item}>
-    <TouchableOpacity onPress={() => navigation.navigate(item.name)}>
-      <Text style={styles.title}>{item.name}</Text>
-    </TouchableOpacity>
-  </View>
-);
+const Item = ({ item, navigation }) => {
+  const { setShowPopup, show } = usePIPMode();
+
+  return (
+    <View style={styles.item}>
+      <TouchableOpacity
+        onPress={() => {
+          if (show && item.name === 'JoinChannelVideo') {
+            setShowPopup(false);
+          }
+          navigation.navigate(item.name);
+        }}
+      >
+        <Text style={styles.title}>{item.name}</Text>
+      </TouchableOpacity>
+    </View>
+  );
+};
 
 const styles = StyleSheet.create({
   container: {

@@ -1,7 +1,7 @@
-import React, { Component } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+  BackHandler,
   Button,
-  PermissionsAndroid,
   Platform,
   ScrollView,
   StyleSheet,
@@ -9,184 +9,135 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-
-import RtcEngine, {
-  ChannelProfile,
-  ClientRole,
-  RtcEngineContext,
-  RtcLocalView,
-  RtcRemoteView,
-} from 'react-native-agora';
+import RtcEngine, { RtcLocalView, RtcRemoteView } from 'react-native-agora';
+import CallService from '../../../../src/services/CallService';
 import Item from '../../../components/Item';
+import { usePIPMode } from '../../../context/useModal';
 
 const config = require('../../../config/agora.config.json');
 
-interface State {
-  channelId: string;
-  isJoined: boolean;
-  remoteUid: number[];
-  switchCamera: boolean;
-  switchRender: boolean;
-  isRenderTextureView: boolean;
-}
+let _engine: RtcEngine;
 
-export default class JoinChannelVideo extends Component<{}, State, any> {
-  _engine: RtcEngine | undefined;
+const JoinChannelVideo = ({ navigation }) => {
+  const [channelId, setChannelId] = useState<string>(config.channelId);
+  const [isJoined, setIsJoined] = useState<boolean>(false);
+  const [switchCamera, setSwitchCamera] = useState<boolean>(true);
+  const [switchRender, setSwitchRender] = useState<boolean>(true);
+  const [remoteUid, setRemoteUid] = useState<number[]>(CallService._remoteUid);
+  const [is_host, setIsHost] = useState<boolean>(CallService._isHost);
+  const [isRenderTextureView, setIsRenderTextureView] =
+    useState<boolean>(false);
 
-  constructor(props: {}) {
-    super(props);
-    this.state = {
-      channelId: config.channelId,
-      isJoined: false,
-      remoteUid: [],
-      switchCamera: true,
-      switchRender: true,
-      isRenderTextureView: false,
+  const { setShowPopup, show } = usePIPMode();
+
+  useEffect(() => {
+    show ? null : CallService._initEngine();
+
+    const setAgoraInstance = async () => {
+      _engine = await CallService._initEngine();
+      if (_engine) {
+        _addListeners(_engine);
+      }
     };
-  }
 
-  UNSAFE_componentWillMount() {
-    this._initEngine();
-  }
+    setAgoraInstance();
+    const showPip = () => {
+      setShowPopup(true);
+    };
 
-  componentWillUnmount() {
-    this._engine?.destroy();
-  }
+    const subscribe = navigation?.addListener('blur', () => showPip());
 
-  _initEngine = async () => {
-    this._engine = await RtcEngine.createWithContext(
-      new RtcEngineContext(config.appId)
-    );
-    this._addListeners();
+    BackHandler.addEventListener('hardwareBackPress', () => showPip());
+    return () => {
+      subscribe();
+      BackHandler.removeEventListener('hardwareBackPress', () => null);
+    };
+  }, []);
 
-    await this._engine.enableVideo();
-    await this._engine.startPreview();
-    await this._engine.setChannelProfile(ChannelProfile.LiveBroadcasting);
-    await this._engine.setClientRole(ClientRole.Broadcaster);
+  const _addListeners = (_engine: RtcEngine) => {
+    _engine?.addListener('Warning', (warningCode) => {
+      console.log('Warning', warningCode);
+    });
+    _engine?.addListener('Error', (errorCode) => {
+      console.log('Error', errorCode);
+    });
+
+    _engine?.addListener('JoinChannelSuccess', (channel, uid, elapsed) => {
+      console.log('JoinChannelSuccess', channel, uid, elapsed);
+      setIsJoined(true);
+    });
+    _engine?.addListener('LeaveChannel', (stats) => {
+      console.log('LeaveChannel', stats);
+      setIsJoined(false);
+      CallService._remoteUid = [];
+      setRemoteUid([]);
+    });
+    _engine?.addListener('UserJoined', (uid, elapsed) => {
+      console.log('UserJoined', uid, elapsed);
+      CallService._remoteUid = [...remoteUid, uid];
+      setRemoteUid([...remoteUid, uid]);
+    });
+    _engine?.addListener('UserOffline', (uid, reason) => {
+      console.log('UserOffline', uid, reason);
+      CallService._remoteUid = remoteUid?.filter((value) => value !== uid);
+      setRemoteUid(remoteUid?.filter((value) => value !== uid));
+    });
+    _engine?.addListener('RejoinChannelSuccess', (uid, elapsed) => {
+      console.log('UserJoined', uid, elapsed);
+      // setRemoteUid([...remoteUid, uid]);
+    });
   };
 
-  _addListeners = () => {
-    this._engine?.addListener('Warning', (warningCode) => {
-      console.info('Warning', warningCode);
-    });
-    this._engine?.addListener('Error', (errorCode) => {
-      console.info('Error', errorCode);
-    });
-    this._engine?.addListener('JoinChannelSuccess', (channel, uid, elapsed) => {
-      console.info('JoinChannelSuccess', channel, uid, elapsed);
-      this.setState({ isJoined: true });
-    });
-    this._engine?.addListener('LeaveChannel', (stats) => {
-      console.info('LeaveChannel', stats);
-      this.setState({ isJoined: false, remoteUid: [] });
-    });
-    this._engine?.addListener('UserJoined', (uid, elapsed) => {
-      console.info('UserJoined', uid, elapsed);
-      this.setState({ remoteUid: [...this.state.remoteUid, uid] });
-    });
-    this._engine?.addListener('UserOffline', (uid, reason) => {
-      console.info('UserOffline', uid, reason);
-      this.setState({
-        remoteUid: this.state.remoteUid.filter((value) => value !== uid),
-      });
-    });
-  };
-
-  _joinChannel = async () => {
-    if (Platform.OS === 'android') {
-      await PermissionsAndroid.requestMultiple([
-        PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
-        PermissionsAndroid.PERMISSIONS.CAMERA,
-      ]);
-    }
-    await this._engine?.joinChannel(
-      config.token,
-      this.state.channelId,
-      null,
-      config.uid
-    );
-  };
-
-  _leaveChannel = async () => {
-    await this._engine?.leaveChannel();
-  };
-
-  _switchCamera = () => {
-    const { switchCamera } = this.state;
-    this._engine
+  const _switchCamera = () => {
+    console.log('_engine', _engine);
+    _engine
       ?.switchCamera()
       .then(() => {
-        this.setState({ switchCamera: !switchCamera });
+        setSwitchCamera(!switchCamera);
       })
       .catch((err) => {
         console.warn('switchCamera', err);
       });
   };
 
-  _switchRender = () => {
-    const { switchRender, remoteUid } = this.state;
-    this.setState({
-      switchRender: !switchRender,
-      remoteUid: remoteUid.reverse(),
-    });
+  const _switchRender = () => {
+    setSwitchRender(!switchRender);
+    CallService._remoteUid = CallService._remoteUid?.reverse();
   };
 
-  _switchRenderView = (value: boolean) => {
-    this.setState({
-      isRenderTextureView: value,
-    });
+  const _switchRenderView = (value: boolean) => {
+    setIsRenderTextureView(value);
   };
 
-  render() {
-    const { channelId, isJoined, switchCamera } = this.state;
+  const _renderVideo = () => {
     return (
       <View style={styles.container}>
-        <View style={styles.top}>
-          <TextInput
-            style={styles.input}
-            onChangeText={(text) => this.setState({ channelId: text })}
-            placeholder={'Channel ID'}
-            value={channelId}
-          />
-          <Button
-            onPress={isJoined ? this._leaveChannel : this._joinChannel}
-            title={`${isJoined ? 'Leave' : 'Join'} channel`}
-          />
-        </View>
-        {Platform.OS === 'android' && (
-          <Item
-            title={'Rendered By TextureView (Default SurfaceView):'}
-            isShowSwitch
-            onSwitchValueChange={this._switchRenderView}
-          />
-        )}
-        {this._renderVideo()}
-        <View style={styles.float}>
-          <Button
-            onPress={this._switchCamera}
-            title={`Camera ${switchCamera ? 'front' : 'rear'}`}
-          />
-        </View>
-      </View>
-    );
-  }
-
-  _renderVideo = () => {
-    const { isRenderTextureView, remoteUid } = this.state;
-    return (
-      <View style={styles.container}>
-        {isRenderTextureView ? (
+        {/* {isRenderTextureView ? (
           <RtcLocalView.TextureView style={styles.local} />
         ) : (
           <RtcLocalView.SurfaceView style={styles.local} />
-        )}
-        {remoteUid !== undefined && (
+        )} */}
+
+        {is_host && <RtcLocalView.SurfaceView style={styles.local} />}
+
+        {!is_host &&
+          remoteUid &&
+          remoteUid?.length > 0 &&
+          remoteUid?.map((value) => (
+            <RtcRemoteView.SurfaceView
+              style={styles.local}
+              uid={value}
+              zOrderMediaOverlay={true}
+            />
+          ))}
+
+        {/* {remoteUid !== undefined && (
           <ScrollView horizontal={true} style={styles.remoteContainer}>
-            {remoteUid.map((value, index) => (
+            {remoteUid?.map((value, index) => (
               <TouchableOpacity
                 key={index}
-                style={styles.remote}
-                onPress={this._switchRender}
+                style={show ? styles.remotePip : styles.remote}
+                onPress={() => _switchRender()}
               >
                 {isRenderTextureView ? (
                   <RtcRemoteView.TextureView
@@ -203,11 +154,50 @@ export default class JoinChannelVideo extends Component<{}, State, any> {
               </TouchableOpacity>
             ))}
           </ScrollView>
-        )}
+        )} */}
       </View>
     );
   };
-}
+
+  return (
+    <View style={styles.container}>
+      {show ? null : (
+        <>
+          <View style={styles.top}>
+            <TextInput
+              style={styles.input}
+              onChangeText={(text) => setChannelId(text)}
+              placeholder={'Channel ID'}
+              value={channelId}
+            />
+            <Button
+              onPress={
+                isJoined ? CallService._leaveChannel : CallService._joinChannel
+              }
+              title={`${isJoined ? 'Leave' : 'Join'} channel`}
+              color={'black'}
+            />
+          </View>
+          {Platform.OS === 'android' && (
+            <Item
+              title={'Rendered By TextureView (Default SurfaceView):'}
+              isShowSwitch
+              onSwitchValueChange={_switchRenderView}
+            />
+          )}
+        </>
+      )}
+      {_renderVideo()}
+      <View style={styles.float}>
+        <Button
+          onPress={() => _switchCamera()}
+          title={`Camera ${switchCamera ? 'front' : 'rear'}`}
+          color={'black'}
+        />
+      </View>
+    </View>
+  );
+};
 
 const styles = StyleSheet.create({
   container: {
@@ -231,11 +221,25 @@ const styles = StyleSheet.create({
   },
   remoteContainer: {
     position: 'absolute',
-    left: 0,
-    top: 0,
+    bottom: 0,
+    right: 0,
   },
   remote: {
-    width: 120,
-    height: 120,
+    width: 200,
+    height: 200,
+  },
+  remotePip: {
+    width: 100,
+    height: 100,
+    // position: 'absolute',
+    right: 0,
+    bottom: 0,
+    zIndex: 999,
+  },
+  pipMode: {
+    height: 350,
+    width: 200,
   },
 });
+
+export default JoinChannelVideo;

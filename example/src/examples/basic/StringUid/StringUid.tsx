@@ -28,11 +28,11 @@ export default class StringUid extends Component<{}, State, any> {
   }
 
   UNSAFE_componentWillMount() {
-    this._initEngine();
+    // this._initEngine();
   }
 
   componentWillUnmount() {
-    this._engine?.destroy();
+    // this._engine?.destroy();
   }
 
   _initEngine = async () => {
